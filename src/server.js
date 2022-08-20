@@ -17,17 +17,35 @@ const handleListen = () => console.log(`Listening on http://localhost:3000`);
 const server = http.createServer(app); //http server
 const wss = new WebSocket.Server({ server }); //websocket server
 
+const sockets = [];
 
+
+// connect start
 wss.on("connection", (socket) => {
+    sockets.push(socket);   // User list
+    socket["nickname"] = "익명";    
+
     console.log("Connected to Browser");
+
+    // disconnect
     socket.on("close", () => {
         console.log("Disconnect from the Browser");
     })
-    socket.on("message", message => {
-        console.log("Browser : " + message);
-    });
 
-    socket.send("Hi");
+    // message
+    socket.on("message", message => {
+        const msgObj = JSON.parse(message.toString());
+
+        if (msgObj.type === "chat") {
+            sockets.forEach(user => user.send(
+                `${socket.nickname} : ${msgObj.payload}`
+            ));
+        }
+        else if (msgObj.type === "name") {
+            console.log(msgObj.payload)
+            socket["nickname"] = msgObj.payload;
+        }
+    });
 });
 
 server.listen(3000, handleListen);
