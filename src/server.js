@@ -1,6 +1,7 @@
 import http from "http";
-import WebSocket from "ws";
+// import SocketIO from "socket.io";
 import express from "express";
+import {Server} from "socket.io";
 
 const app = express();
 
@@ -8,44 +9,36 @@ app.set("view engine", "pug");
 app.set("views", __dirname + "/views");
 app.use("/public", express.static(__dirname + "/public"));
 app.get("/", (req, res) => res.render("home"));
-// app.get("/*", (req, res) => res.render("home"));
 
 const handleListen = () => console.log(`Listening on http://localhost:3000`);
-// app.listen(3000, handleListen);
 
-//같은 서버(포트)에서 http, websocket 실행
-const server = http.createServer(app); //http server
-const wss = new WebSocket.Server({ server }); //websocket server
+//같은 서버(포트)에서 http, socketio 실행
+const httpServer = http.createServer(app); //http server
+const socketServer = new Server(httpServer);
 
-const sockets = [];
+socketServer.on("connection", (socket) => {
+    socket["nickname"] = "익명"; 
 
+    socket.on("enter_room", (roomName, done) => {
+        socket.join(roomName);
+        done();
+        socket.to(roomName).emit("joined", socket.nickname)
+    });
 
-// connect start
-wss.on("connection", (socket) => {
-    sockets.push(socket);   // User list
-    socket["nickname"] = "익명";    
-
-    console.log("Connected to Browser");
-
-    // disconnect
-    socket.on("close", () => {
-        console.log("Disconnect from the Browser");
+    socket.on("nickname",(roomName, nickname) => {
+        socket["nickname"] = nickname; 
     })
 
-    // message
-    socket.on("message", message => {
-        const msgObj = JSON.parse(message.toString());
+    socket.on("new_message", (roomName, message, done) => {
+        socket.to(roomName).emit("new_message", `${socket.nickname} : ${message}`);
+        done();
+    })
 
-        if (msgObj.type === "chat") {
-            sockets.forEach(user => user.send(
-                `${socket.nickname} : ${msgObj.payload}`
-            ));
-        }
-        else if (msgObj.type === "name") {
-            console.log(msgObj.payload)
-            socket["nickname"] = msgObj.payload;
-        }
-    });
+    socket.on("disconnecting", () => {
+        socket.rooms.forEach(room => socket.to(room).emit("leave", socket.nickname));
+    })
 });
 
-server.listen(3000, handleListen);
+
+
+httpServer.listen(3000, handleListen);
